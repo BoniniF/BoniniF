@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>2 Monitor 3D Interattivi - HTML Completo</title>
+    <style>
+        body {
+          margin: 0;
+          overflow: hidden;
+          font-family: Arial, sans-serif;
+        }
+        #gameContainer {
+          width: 100vw;
+          height: 100vh;
+          position: relative;
+        }
+        #instructions {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          background: rgba(0,0,0,0.7);
+          color: white;
+          padding: 20px;
+          border-radius: 10px;
+          text-align: center;
+          display: block;
+          z-index: 10;
+        }
+        #instructions.hidden {
+          opacity: 0;
+          pointer-events: none;
+        }
+        #interactionHint {
+          position: absolute;
+          top: 20px;
+          left: 50%;
+          transform: translateX(-50%);
+          background: rgba(0,0,0,0.7);
+          color: white;
+          padding: 10px 20px;
+          border-radius: 5px;
+          display: none;
+          z-index: 15;
+        }
+        #interactionHint.show {
+          display: block;
+        }
+
+        /* Renderer CSS3D (per l’iframe in 3D) */
+        .css3d-renderer {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          pointer-events: none;
+          z-index: 2;
+        }
+        .css3d-renderer.interactive {
+          pointer-events: auto;
+          z-index: 20;
+        }
+
+        /* Stili per l’iframe stesso */
+        .monitor-iframe {
+          border: 12px solid #222;
+          border-radius: 8px;
+          box-shadow: 0 0 30px rgba(0,0,0,0.7);
+          background: #000;
+          transition: all 0.2s ease;
+          touch-action: auto; /* consente scrolling/drag all’interno dell’iframe */
+          overflow: auto;
+        }
+        .monitor-iframe.interactive {
+          border-color: #00ff00;
+          box-shadow: 0 0 40px rgba(0,255,0,0.3);
+        }
+
+        /* Overlay invisibile per catturare eventi quando non in interazione */
+        #eventCaptureOverlay {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          pointer-events: none;
+          z-index: 15;
+        }
+        #eventCaptureOverlay.inactive {
+          pointer-events: none;
+          display: none;
+        }
+
+        /* Quando entriamo in interazione, rendiamo il canvas WebGL semi-trasparente e non riceve eventi */
+        canvas.webgl-hidden {
+          pointer-events: none;
+          opacity: 0.5;
+        }
+
+        /* Debug overlay */
+        #debugOverlay {
+          position: absolute;
+          top: 10px;
+          right: 10px;
+          background: rgba(0,0,0,0.7);
+          color: white;
+          padding: 10px;
+          border-radius: 5px;
+          font-family: monospace;
+          font-size: 12px;
+          display: none;
+          z-index: 25;
+        }
+
+        /* Selettore siti (mostrato in debug) */
+        #siteSelector {
+          position: absolute;
+          bottom: 20px;
+          left: 20px;
+          background: rgba(0,0,0,0.7);
+          color: white;
+          padding: 10px;
+          border-radius: 5px;
+          display: none;
+          z-index: 15;
+        }
+        #siteSelector.show {
+          display: block;
+        }
+        #siteSelector select {
+          margin-left: 10px;
+          padding: 5px;
+        }
+
+        /* Cursore personalizzato quando in modalità interazione */
+        .interactive-mode {
+          cursor: crosshair;
+        }
+    </style>
+
+    <!-- Three.js e OBJLoader -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+    <!-- CSS3DRenderer -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/renderers/CSS3DRenderer.js"></script>
+</head>
+<body>
+  <div id="gameContainer"></div>
+
+  <!-- Overlay invisibile per catturare eventi quando non in interazione -->
+  <div id="eventCaptureOverlay"></div>
+
+  <div id="instructions">
+      <h3>🎮 Controlli Avanzati</h3>
+      <p>Clicca per iniziare!</p>
+      <p><strong>WASD</strong> per muoversi</p>
+      <p><strong>Mouse</strong> per guardare</p>
+      <p><strong>Clicca sul monitor</strong> per interagire direttamente</p>
+      <p><strong>ESC</strong> per uscire dall'interazione</p>
+      <p><em>Interazione diretta sui due monitor 3D!</em></p>
+  </div>
+
+  <div id="interactionHint">
+      <strong>🖱️ Interazione Diretta Attiva</strong> - Premi <strong>ESC</strong> per uscire
+  </div>
+
+  <div id="siteSelector">
+      <label>Sito di test:</label>
+      <select id="siteSelect">
+          <option value="data:text/html,<h1 style='color:white;background:black;padding:20px;text-align:center'>Test Interattivo 1</h1><div style='padding:20px;background:white'><button onclick='this.style.background=Math.random()>0.5?\"red\":\"blue\"' style='padding:10px;margin:5px'>Clicca qui!</button><br><input placeholder='Scrivi qualcosa...' style='padding:10px;margin:5px;width:200px'><br><button onclick='alert(\"Funziona Monitor 1!\")' style='padding:10px;margin:5px'>Alert Test 1</button></div>">Test HTML Interattivo 1</option>
+          <option value="data:text/html,<h1 style='color:white;background:black;padding:20px;text-align:center'>Test Interattivo 2</h1><div style='padding:20px;background:white'><button onclick='this.style.background=Math.random()>0.5?\"green\":\"orange\"' style='padding:10px;margin:5px'>Premi qui!</button><br><input placeholder='Altro monitor...' style='padding:10px;margin:5px;width:200px'><br><button onclick='alert(\"Funziona Monitor 2!\")' style='padding:10px;margin:5px'>Alert 2</button></div>">Test HTML Alternativo</option>
+          <option value="https://example.com">Example.com</option>
+          <option value="https://www.wikipedia.org">Wikipedia</option>
+          <option value="https://bonini.ct.ws">Bonini.ct.ws</option>
+      </select>
+  </div>
+
+  <div id="debugOverlay">
+      <div>Modalità: <span id="modeStatus">Movimento</span></div>
+      <div>Mouse Lock: <span id="lockStatus">No</span></div>
+      <div>Interazione: <span id="interactionStatus">No</span></div>
+      <div>Monitor Hit: <span id="monitorHit">Nessuno</span></div>
+      <div>Coordinate: <span id="coordinates">-</span></div>
+      <div>Eventi Inoltrati: <span id="eventsForwarded">0</span></div>
+  </div>
+
+  <script>
+    // —–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+    // 1) SCENA, CAMERA, RENDERER (WebGL + CSS3D)
+    // —–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+    // WebGL Renderer
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.domElement.style.position = 'absolute';
+    renderer.domElement.style.top = '0';
+    renderer.domElement.style.left = '0';
+    renderer.domElement.style.zIndex = '1'; // sotto il CSS3DRenderer
+    document.getElementById('gameContainer').appendChild(renderer.domElement);
+
+    // CSS3D Renderer
+    const cssRenderer = new THREE.CSS3DRenderer();
+    cssRenderer.setSize(window.innerWidth, window.innerHeight);
+    cssRenderer.domElement.style.position = 'absolute';
+    cssRenderer.domElement.style.top = '0';
+    cssRenderer.domElement.style.left = '0';
+    cssRenderer.domElement.classList.add('css3d-renderer');
+    document.getElementById('gameContainer').appendChild(cssRenderer.domElement);
+
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    let isInteracting = false;
+    let isMouseLocked = false;
+    let lastMouseEvent = null;
+    let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+    let currentSiteUrl1 = 'https://bonini.ct.ws';
+    let currentSiteUrl2 = 'https://wikipedia.org';
+    let eventsForwardedCount = 0;
+    let currentInteractingIframe = 0; // 0 = nessuno, 1 = primo, 2 = secondo
+
+    const instructionsEl = document.getElementById('instructions');
+    const hintEl = document.getElementById('interactionHint');
+    const debugEl = document.getElementById('debugOverlay');
+    const siteSelectorEl = document.getElementById('siteSelector');
+    const siteSelectEl = document.getElementById('siteSelect');
+    const eventCaptureEl = document.getElementById('eventCaptureOverlay');
+    let debugMode = false;
+
+    // —–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+    // 2) CREAZIONE AMBIENTE 3D (pareti, pavimento, soffitto, scrivania, libreria)
+    // —–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+
+    // Texture muri
+    const canvas = document.createElement('canvas');
+    const textureSize = 512;
+    canvas.width = textureSize; canvas.height = textureSize;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#1a4d0f'; ctx.fillRect(0, 0, textureSize, textureSize);
+    for (let x = 0; x < textureSize; x++) {
+      for (let y = 0; y < textureSize; y++) {
+        const value = Math.random() * 25;
+        ctx.fillStyle = `rgba(255,255,255,${value/255})`;
+        ctx.fillRect(x, y, 1, 1);
+      }
+    }
+    const wallTexture = new THREE.CanvasTexture(canvas);
+    wallTexture.wrapS = THREE.RepeatWrapping;
+    wallTexture.wrapT = THREE.RepeatWrapping;
+    wallTexture.repeat.set(2, 2);
+
+    const roomMaterial = new THREE.MeshPhongMaterial({
+      color: 0x1a4d0a,
+      side: THREE.BackSide,
+      roughness: 0.6,
+      metalness: 0.3,
+      bumpMap: wallTexture,
+      map: wallTexture,
+      bumpScale: 0.02,
+      flatShading: true
+    });
+
+    const roomGeometry = new THREE.BufferGeometry();
+    const vertices = new Float32Array([
+      -5, -4, -5,  5, -4, -5,  5, -4, 5,  -5, -4, 5,
+      -5, 4, -5,   5, 4, -5,   5, 4, 5,   -5, 4, 5,
+      -3, 6, -3,   3, 6, -3,   3, 6, 3,   -3, 6, 3,
+      -3, 6, -3,   3, 6, -3,   3, 6, 3,   -3, 6, 3
+    ]);
+    const indices = new Uint16Array([
+      0,1,2, 0,2,3,
+      0,4,1, 1,4,5,
+      1,5,6, 1,6,2,
+      2,6,7, 2,7,3,
+      3,7,4, 3,4,0,
+      4,8,5, 5,8,9,
+      5,9,10,5,10,6,
+      6,10,11,6,11,7,
+      7,11,8,7,8,4,
+      8,9,10,8,10,11
+    ]);
+    roomGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+    roomGeometry.setIndex(new THREE.BufferAttribute(indices, 1));
+    const uvs = new Float32Array([
+      0,0, 4,0, 4,4, 0,4,
+      0,0, 4,0, 4,4, 0,4,
+      1.5,0, 2.5,0, 2.5,4, 1.5,4,
+      0,0, 1,0, 1,1, 0,1
+    ]);
+    roomGeometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    roomGeometry.computeVertexNormals();
+    const room = new THREE.Mesh(roomGeometry, roomMaterial);
+    scene.add(room);
+
+    // Tetto con assi
+    const roofPlanksGroup = new THREE.Group();
+    const roofPlankWidth = 0.5;
+    const roofPlankLength = 6;
+    for (let x = -3; x < 3; x += roofPlankWidth) {
+      const plankGeo = new THREE.BoxGeometry(roofPlankWidth - 0.02, 0.1, roofPlankLength - 0.02);
+      const plankMat = new THREE.MeshPhongMaterial({
+        color: new THREE.Color(0x3d2817).multiplyScalar(0.8 + Math.random() * 0.4),
+        roughness: 0.8,
+        metalness: 0.2
+      });
+      const plank = new THREE.Mesh(plankGeo, plankMat);
+      plank.rotation.z = (Math.random() - 0.5) * 0.02;
+      plank.position.set(x + roofPlankWidth / 2, 6.05, 0);
+      const grooveGeo = new THREE.BoxGeometry(roofPlankWidth - 0.05, 0.12, 0.02);
+      const grooveMat = new THREE.MeshPhongMaterial({ color: 0x1a1a1a });
+      const groove = new THREE.Mesh(grooveGeo, grooveMat);
+      groove.position.set(0, 0.01, roofPlankLength / 2);
+      plank.add(groove);
+      roofPlanksGroup.add(plank);
+    }
+    scene.add(roofPlanksGroup);
+
+    // Pavimento in parquet
+    const planksGroup = new THREE.Group();
+    const plankWidth = 1;
+    const plankLength = 4;
+    for (let x = -5; x < 5; x += plankWidth) {
+      for (let z = -5; z < 5; z += plankLength) {
+        const plankGeo = new THREE.BoxGeometry(plankWidth - 0.02, 0.1, plankLength - 0.02);
+        const plankMat = new THREE.MeshPhongMaterial({
+          color: new THREE.Color(0x3d2817).multiplyScalar(0.8 + Math.random() * 0.4),
+          roughness: 0.8,
+          metalness: 0.2
+        });
+        const plank = new THREE.Mesh(plankGeo, plankMat);
+        plank.rotation.y = (Math.random() - 0.5) * 0.02;
+        plank.position.set(x + plankWidth / 2, -3.9, z + plankLength / 2);
+        const grooveGeo = new THREE.BoxGeometry(plankWidth - 0.05, 0.12, 0.02);
+        const grooveMat = new THREE.MeshPhongMaterial({ color: 0x1a1a1a });
+        const groove = new THREE.Mesh(grooveGeo, grooveMat);
+        groove.position.set(0, 0.01, plankLength / 2);
+        plank.add(groove);
+        planksGroup.add(plank);
+      }
+    }
+    scene.add(planksGroup);
+
+    // Player e telecamera
+    const player = new THREE.Group();
+    player.position.set(0, 0, 0);
+    scene.add(player);
+    camera.position.y = 1.6;
+    player.add(camera);
+
+    // Scrivania
+    const deskGroup = new THREE.Group();
+    const deskTopGeo = new THREE.BoxGeometry(8, 0.6, 6.5);
+    const deskMat = new THREE.MeshPhongMaterial({ color: 0x362200 });
+    const deskTop = new THREE.Mesh(deskTopGeo, deskMat);
+    deskTop.position.y = -0.3;
+    deskGroup.add(deskTop);
+    const legGeo = new THREE.BoxGeometry(0.1, 3.5, 0.1);
+    const legMat = new THREE.MeshPhongMaterial({ color: 0x362217 });
+    [[-3.9,-2.05,3.15], [3.9,-2.05,3.15], [-3.9,-2.05,-3.15], [3.9,-2.05,-3.15]].forEach(pos => {
+      const leg = new THREE.Mesh(legGeo, legMat);
+      leg.position.set(pos[0], pos[1], pos[2]);
+      deskGroup.add(leg);
+    });
+    const drawerUnitGeo = new THREE.BoxGeometry(3, 3.5, 2);
+    const drawerUnitMat = new THREE.MeshPhongMaterial({ color: 0x362209 });
+    const drawerUnit = new THREE.Mesh(drawerUnitGeo, drawerUnitMat);
+    drawerUnit.position.set(2.3, -2.05, -2);
+    deskGroup.add(drawerUnit);
+    const drawerGeo = new THREE.BoxGeometry(1, 0.8, 1);
+    const drawerMat = new THREE.MeshPhongMaterial({ color: 0x5B3D00 });
+    [[3.4,-0.9,-2], [3.4,-1.75,-2], [3.4,-2.6,-2]].forEach(pos => {
+      const d = new THREE.Mesh(drawerGeo, drawerMat);
+      d.position.set(pos[0], pos[1], pos[2]);
+      deskGroup.add(d);
+      const handleGeo = new THREE.BoxGeometry(0.1, 0.03, 0.3);
+      const handleMat = new THREE.MeshPhongMaterial({ color: 0x3d3d3d });
+      const h = new THREE.Mesh(handleGeo, handleMat);
+      h.position.set(3.9, pos[1], -2);
+      deskGroup.add(h);
+    });
+    deskGroup.position.set(0, 0, 4.5);
+    deskGroup.rotation.y = Math.PI / 2;
+    scene.add(deskGroup);
+
+    // Libreria
+    const bookshelfGroup = new THREE.Group();
+    const shelfWidth = 9.5, shelfHeight = 7, shelfDepth = 0.8;
+    const bookshelfBackGeo = new THREE.BoxGeometry(shelfWidth, shelfHeight, 0.1);
+    const bookshelfMat = new THREE.MeshPhongMaterial({ color: 0x5c4033 });
+    const bookshelfBack = new THREE.Mesh(bookshelfBackGeo, bookshelfMat);
+    bookshelfGroup.add(bookshelfBack);
+    const sideGeo = new THREE.BoxGeometry(0.1, shelfHeight, shelfDepth);
+    const leftSide = new THREE.Mesh(sideGeo, bookshelfMat);
+    leftSide.position.set(-shelfWidth / 2, 0, shelfDepth / 2);
+    bookshelfGroup.add(leftSide);
+    const rightSide = new THREE.Mesh(sideGeo, bookshelfMat);
+    rightSide.position.set(shelfWidth / 2, 0, shelfDepth / 2);
+    bookshelfGroup.add(rightSide);
+    const numShelves = 6, shelfThickness = 0.1;
+    for (let i = 0; i < numShelves; i++) {
+        const shelf = new THREE.Mesh(
+            new THREE.BoxGeometry(shelfWidth, shelfThickness, shelfDepth),
+            bookshelfMat
+        );
+        shelf.position.set(0, -shelfHeight/2 + i*(shelfHeight/numShelves), shelfDepth/2);
+        bookshelfGroup.add(shelf);
+    }
+    const bookColors = [
+        0x8B4513,0x8B0000,0x006400,0x000080,0x4B0082,0x800080,
+        0x654321,0x800000,0x228B22,0x483D8B,0x4A0404,0x3B0B0B,
+        0x1A0F0F,0x8B4726,0x3D1F00
+    ];
+    const maxBooksPerShelf = 15;
+    for (let s = 0; s < numShelves; s++) {
+        let currentX = -shelfWidth/2 + 0.2;
+        for (let b = 0; b < maxBooksPerShelf; b++) {
+            const bookGroup = new THREE.Group();
+            const bookWidth = 0.3 + Math.random()*0.3;
+            const bookHeight = 0.7 + Math.random()*0.5;
+            const bookDepth = 0.15 + Math.random()*0.35;
+            const bookGeo = new THREE.BoxGeometry(bookWidth, bookHeight, bookDepth);
+            const bookMat = new THREE.MeshPhongMaterial({
+                color: bookColors[Math.floor(Math.random()*bookColors.length)],
+                roughness: 0.8,
+                metalness: 0.2
+            });
+            const bookMesh = new THREE.Mesh(bookGeo, bookMat);
+            bookGroup.add(bookMesh);
+            const spineDetail = new THREE.Mesh(
+                new THREE.BoxGeometry(bookWidth+0.02, bookHeight, 0.02),
+                new THREE.MeshPhongMaterial({
+                    color: new THREE.Color(bookMat.color.getHex()).multiplyScalar(0.9),
+                    roughness: 0.9
+                })
+            );
+            spineDetail.position.z = bookDepth/2 + 0.01;
+            bookGroup.add(spineDetail);
+            const bandGeo = new THREE.BoxGeometry(bookWidth, 0.03, bookDepth);
+            const bandMat = new THREE.MeshPhongMaterial({
+                color: Math.random()>0.5 ? 0xD4AF37 : 0xC0C0C0,
+                metalness: 0.5,
+                roughness: 0.5
+            });
+            const topBand = new THREE.Mesh(bandGeo, bandMat);
+            topBand.position.y = bookHeight/2 - 0.015;
+            const bottomBand = new THREE.Mesh(bandGeo, bandMat);
+            bottomBand.position.y = -bookHeight/2 + 0.015;
+            bookGroup.add(topBand, bottomBand);
+            bookGroup.position.set(
+                currentX + bookWidth/2,
+                -shelfHeight/2 + (s*(shelfHeight/numShelves)) + bookHeight/2 + shelfThickness,
+                shelfDepth/2
+            );
+            if (Math.random() > 0.7) {
+                bookGroup.rotation.z = (Math.random() - 0.5)*0.2;
+                bookGroup.rotation.y = (Math.random() - 0.5)*0.1;
+            }
+            bookshelfGroup.add(bookGroup);
+            currentX += bookWidth + 0.05;
+            if (currentX > shelfWidth/2 - 0.2) break;
+        }
+    }
+    bookshelfGroup.position.set(0, 0, -4.9);
+    scene.add(bookshelfGroup);
+
+    // —–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+    // 3) COLLISIONI
+    // —–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+
+    const deskBox = new THREE.Box3().setFromObject(deskGroup);
+    const bookshelfBox = new THREE.Box3().setFromObject(bookshelfGroup);
+    function checkCollision(nextPosition) {
+      const halfSize = 0.25;
+      const playerBox = new THREE.Box3(
+        new THREE.Vector3(nextPosition.x - halfSize, 0, nextPosition.z - halfSize),
+        new THREE.Vector3(nextPosition.x + halfSize, 3, nextPosition.z + halfSize)
+      );
+      return playerBox.intersectsBox(deskBox) || playerBox.intersectsBox(bookshelfBox);
+    }
+
+    // —–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+    // 4) PRIMO MONITOR “STATICO” (monitor 1)
+    // —–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+
+    const monitorGeo1 = new THREE.PlaneGeometry(4, 3);
+    const monitorMat1 = new THREE.MeshBasicMaterial({
+      color: 0x222222,
+      transparent: true,
+      opacity: 0
+    });
+    const monitorMesh1 = new THREE.Mesh(monitorGeo1, monitorMat1);
+    monitorMesh1.position.set(0, 2, 3);
+    monitorMesh1.rotation.y = Math.PI;
+    monitorMesh1.name = 'monitor1';
+
+    const bezelWidth1   = 3.2;
+    const bezelHeight1  = 2;
+    const bezelDepth1   = 0.1;
+    const bezelGeo1  = new THREE.BoxGeometry(bezelWidth1, bezelHeight1, bezelDepth1);
+    const bezelMat1  = new THREE.MeshPhongMaterial({ color: 0x111111 });
+    const bezelMesh1 = new THREE.Mesh(bezelGeo1, bezelMat1);
+    bezelMesh1.position.copy(monitorMesh1.position);
+    bezelMesh1.rotation.copy(monitorMesh1.rotation);
+    bezelMesh1.translateZ(bezelDepth1 / 2);
+
+    const iframeElement1 = document.createElement('iframe');
+    iframeElement1.src = currentSiteUrl1;
+    iframeElement1.width  = '724';
+    iframeElement1.height = '428';
+    iframeElement1.className = 'monitor-iframe';
+    iframeElement1.allow   = 'fullscreen';
+    iframeElement1.sandbox = 'allow-scripts allow-same-origin';
+
+    iframeElement1.setAttribute('scrolling', 'yes');
+
+document.body.appendChild(iframeElement1);
+
+    const cssObject1 = new THREE.CSS3DObject(iframeElement1);
+    cssObject1.position.copy(monitorMesh1.position);
+    cssObject1.rotation.copy(monitorMesh1.rotation);
+    cssObject1.scale.set(4/1024, 3/768, 1);
+    cssObject1.translateZ(0.001);
+
+    const monitorGroup1 = new THREE.Group();
+    monitorGroup1.add(monitorMesh1);
+    monitorGroup1.add(bezelMesh1);
+    monitorGroup1.add(cssObject1);
+    monitorGroup1.position.set(0, 1.5, 3);
+    monitorGroup1.rotation.y = -Math.PI / 2;
+    scene.add(monitorGroup1);
+
+    // —–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+    // 5) SECONDO MONITOR “STATICO” (monitor 2)
+    // —–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+
+    const monitorGeo2 = new THREE.PlaneGeometry(4, 3);
+    const monitorMat2 = new THREE.MeshBasicMaterial({
+      color: 0x222222,
+      transparent: true,
+      opacity: 0
+    });
+    const monitorMesh2 = new THREE.Mesh(monitorGeo2, monitorMat2);
+    monitorMesh2.position.set(3, 2, -1);
+    monitorMesh2.rotation.y = -Math.PI / 4;
+    monitorMesh2.name = 'monitor2';
+
+    const bezelWidth2   = 3.2;
+    const bezelHeight2  = 2;
+    const bezelDepth2   = 0.1;
+    const bezelGeo2  = new THREE.BoxGeometry(bezelWidth2, bezelHeight2, bezelDepth2);
+    const bezelMat2  = new THREE.MeshPhongMaterial({ color: 0x111111 });
+    const bezelMesh2 = new THREE.Mesh(bezelGeo2, bezelMat2);
+    bezelMesh2.position.copy(monitorMesh2.position);
+    bezelMesh2.rotation.copy(monitorMesh2.rotation);
+    bezelMesh2.translateZ(bezelDepth2 / 2);
+
+    const iframeElement2 = document.createElement('iframe');
+    iframeElement2.src = currentSiteUrl2;
+    iframeElement2.width  = '724';
+    iframeElement2.height = '428';
+    iframeElement2.className = 'monitor-iframe';
+    iframeElement2.allow   = 'fullscreen';
+    iframeElement2.sandbox = 'allow-scripts allow-same-origin allow-forms allow-popups';
+
+    const cssObject2 = new THREE.CSS3DObject(iframeElement2);
+    cssObject2.position.copy(monitorMesh2.position);
+    cssObject2.rotation.copy(monitorMesh2.rotation);
+    cssObject2.scale.set(4/1024, 3/768, 1);
+    cssObject2.translateZ(0.001);
+
+    const monitorGroup2 = new THREE.Group();
+    monitorGroup2.add(monitorMesh2);
+    monitorGroup2.add(bezelMesh2);
+    monitorGroup2.add(cssObject2);
+    monitorGroup2.position.set(3, 1.5, -1);
+    monitorGroup2.rotation.y = -Math.PI / 4;
+    scene.add(monitorGroup2);
+
+    // —–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+    // 6) ILLUMINAZIONE
+    // —–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
+    const pointLight = new THREE.PointLight(0xffffff, 1.4);
+    pointLight.position.set(0, 2, 0);
+    scene.add(pointLight);
+    const secondaryLight = new THREE.PointLight(0xffffff, 0.8);
+    secondaryLight.position.set(0, -2, 0);
+    scene.add(secondaryLight);
+    const mainLight = new THREE.PointLight(0xffffff, 1.2);
+    mainLight.position.set(0, 3, 0);
+    mainLight.castShadow = true;
+    scene.add(mainLight);
+
+    // —–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+    // 7) GESTIONE INTERAZIONE SUI MONITOR (senza forwardEvent)
+    // —–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+
+    function updateDebugInfo() {
+        if (debugMode) {
+            document.getElementById('modeStatus').textContent = isInteracting ? 'Interazione' : 'Movimento';
+            document.getElementById('lockStatus').textContent = isMouseLocked ? 'Sì' : 'No';
+            document.getElementById('interactionStatus').textContent = isInteracting ? 'Sì' : 'No';
+            document.getElementById('eventsForwarded').textContent = eventsForwardedCount;
+            let hitText = currentInteractingIframe === 1 ? 'Monitor 1' :
+                          currentInteractingIframe === 2 ? 'Monitor 2' : 'Nessuno';
+            document.getElementById('monitorHit').textContent = hitText;
+        }
+    }
+
+    function updateSite(url, iframeIndex) {
+        if (iframeIndex === 1) {
+            currentSiteUrl1 = url;
+            iframeElement1.src = url;
+        } else if (iframeIndex === 2) {
+            currentSiteUrl2 = url;
+            iframeElement2.src = url;
+        }
+        eventsForwardedCount = 0;
+        updateDebugInfo();
+        console.log(`🌐 Sito monitor ${iframeIndex} aggiornato:`, url);
+    }
+
+    function enterInteractionMode(monitorIndex) {
+        console.log('🖱️ Entrando in modalità interazione diretta monitor', monitorIndex);
+        isInteracting = true;
+        currentInteractingIframe = monitorIndex;
+
+        renderer.domElement.classList.add('webgl-hidden');
+        eventCaptureEl.classList.add('inactive');
+        cssRenderer.domElement.classList.add('interactive');
+        if (monitorIndex === 1) iframeElement1.classList.add('interactive');
+        else iframeElement2.classList.add('interactive');
+
+        document.body.classList.add('interactive-mode');
+        hintEl.classList.add('show');
+
+        if (document.exitPointerLock) {
+            document.exitPointerLock();
+        }
+        instructionsEl.classList.add('hidden');
+
+        setTimeout(() => {
+            if (monitorIndex === 1) iframeElement1.focus();
+            else iframeElement2.focus();
+            console.log('✅ Modalità interazione diretta monitor', monitorIndex, 'attivata');
+        }, 100);
+
+        updateDebugInfo();
+    }
+
+    function exitInteractionMode() {
+        console.log('🚪 Uscendo dalla modalità interazione...');
+        isInteracting = false;
+        currentInteractingIframe = 0;
+
+        renderer.domElement.classList.remove('webgl-hidden');
+        eventCaptureEl.classList.remove('inactive');
+        cssRenderer.domElement.classList.remove('interactive');
+        iframeElement1.classList.remove('interactive');
+        iframeElement2.classList.remove('interactive');
+
+        document.body.classList.remove('interactive-mode');
+        hintEl.classList.remove('show');
+
+        setTimeout(() => {
+            const element = document.getElementById('gameContainer');
+            const requestPointerLock = element.requestPointerLock ||
+                                      element.mozRequestPointerLock ||
+                                      element.webkitRequestPointerLock;
+            if (requestPointerLock) {
+                requestPointerLock.call(element);
+            }
+        }, 100);
+
+        updateDebugInfo();
+        console.log('✅ Modalità interazione disattivata');
+    }
+
+    // —–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+    // 8) SISTEMA DI CONTROLLO E MOVIMENTO
+    // —–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key.toLowerCase() === 'd' && event.ctrlKey) {
+            debugMode = !debugMode;
+            debugEl.style.display = debugMode ? 'block' : 'none';
+            siteSelectorEl.classList.toggle('show', debugMode);
+            updateDebugInfo();
+            return;
+        }
+        if (event.key === 'Escape') {
+            if (isInteracting) exitInteractionMode();
+            return;
+        }
+        if (!isInteracting) {
+            switch (event.key.toLowerCase()) {
+                case 'w':
+                case 'arrowup':
+                    moveForward = true;
+                    break;
+                case 's':
+                case 'arrowdown':
+                    moveBackward = true;
+                    break;
+                case 'a':
+                case 'arrowleft':
+                    moveLeft = true;
+                    break;
+                case 'd':
+                case 'arrowright':
+                    moveRight = true;
+                    break;
+            }
+        }
+    });
+
+    document.addEventListener('keyup', (event) => {
+        switch (event.key.toLowerCase()) {
+            case 'w':
+            case 'arrowup':
+                moveForward = false;
+                break;
+            case 's':
+            case 'arrowdown':
+                moveBackward = false;
+                break;
+            case 'a':
+            case 'arrowleft':
+                moveLeft = false;
+                break;
+            case 'd':
+            case 'arrowright':
+                moveRight = false;
+                break;
+        }
+    });
+
+    document.addEventListener('click', (event) => {
+        if (isInteracting) return;
+        const rect = renderer.domElement.getBoundingClientRect();
+        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+
+        const intersects1 = raycaster.intersectObject(monitorMesh1);
+        const intersects2 = raycaster.intersectObject(monitorMesh2);
+        if (intersects1.length > 0) {
+            enterInteractionMode(1);
+        } else if (intersects2.length > 0) {
+            enterInteractionMode(2);
+        } else {
+            if (!isMouseLocked) {
+                const element = document.getElementById('gameContainer');
+                const requestPointerLock = element.requestPointerLock ||
+                                          element.mozRequestPointerLock ||
+                                          element.webkitRequestPointerLock;
+                if (requestPointerLock) {
+                    requestPointerLock.call(element);
+                }
+            }
+        }
+    });
+
+    document.addEventListener('mousemove', (event) => {
+        lastMouseEvent = event;
+        if (!isInteracting && isMouseLocked) {
+            const sensitivity = 0.002;
+            const euler = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
+            euler.y -= event.movementX * sensitivity;
+            euler.x -= event.movementY * sensitivity;
+            euler.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, euler.x));
+            camera.quaternion.setFromEuler(euler);
+        }
+    });
+
+    document.addEventListener('pointerlockchange', () => {
+        isMouseLocked = document.pointerLockElement !== null;
+        if (!isInteracting) {
+            instructionsEl.classList.toggle('hidden', isMouseLocked);
+        }
+        updateDebugInfo();
+    });
+
+    siteSelectEl.addEventListener('change', (event) => {
+        updateSite(event.target.value, 1);
+        updateSite(event.target.value, 2);
+    });
+
+    // —–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+    // 8.1) CONTROLLI TOUCH PER MOBILE
+    // —–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+
+    let touchMoveStart = null;
+    let touchLookStart = null;
+    const gameContainer = document.getElementById('gameContainer');
+
+    gameContainer.addEventListener('touchstart', (e) => {
+        if (isInteracting) {
+            // Passo tutto all’iframe: nessun controllo di movimento/visuale
+            return;
+        }
+        for (let i = 0; i < e.touches.length; i++) {
+            const touch = e.touches[i];
+            const x = touch.clientX;
+            if (x < window.innerWidth / 2 && touchMoveStart === null) {
+                touchMoveStart = { id: touch.identifier, x: touch.clientX, y: touch.clientY };
+            } else if (x >= window.innerWidth / 2 && touchLookStart === null) {
+                touchLookStart = { id: touch.identifier, x: touch.clientX, y: touch.clientY };
+            }
+        }
+    });
+
+    gameContainer.addEventListener('touchmove', (e) => {
+        if (isInteracting) {
+            return;
+        }
+        e.preventDefault();
+        for (let i = 0; i < e.touches.length; i++) {
+            const touch = e.touches[i];
+            if (touchMoveStart && touch.identifier === touchMoveStart.id) {
+                const dx = touch.clientX - touchMoveStart.x;
+                const dy = touch.clientY - touchMoveStart.y;
+                if (dy < -10) {
+                    moveForward = true;
+                    moveBackward = false;
+                } else if (dy > 10) {
+                    moveBackward = true;
+                    moveForward = false;
+                } else {
+                    moveForward = moveBackward = false;
+                }
+                if (dx < -10) {
+                    moveLeft = true;
+                    moveRight = false;
+                } else if (dx > 10) {
+                    moveRight = true;
+                    moveLeft = false;
+                } else {
+                    moveLeft = moveRight = false;
+                }
+            }
+            else if (touchLookStart && touch.identifier === touchLookStart.id) {
+                const dx = touch.clientX - touchLookStart.x;
+                const dy = touch.clientY - touchLookStart.y;
+                const sensitivity = 0.002;
+                const euler = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
+                euler.y -= dx * sensitivity;
+                euler.x -= dy * sensitivity;
+                euler.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, euler.x));
+                camera.quaternion.setFromEuler(euler);
+                touchLookStart.x = touch.clientX;
+                touchLookStart.y = touch.clientY;
+            }
+        }
+    }, { passive: false });
+
+    gameContainer.addEventListener('touchend', (e) => {
+        if (isInteracting) {
+            return;
+        }
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            const touch = e.changedTouches[i];
+            if (touchMoveStart && touch.identifier === touchMoveStart.id) {
+                touchMoveStart = null;
+                moveForward = moveBackward = moveLeft = moveRight = false;
+            }
+            if (touchLookStart && touch.identifier === touchLookStart.id) {
+                touchLookStart = null;
+            }
+        }
+    });
+
+    // —–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+    // 9) LOOP DI ANIMAZIONE
+    // —–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+
+    function animate() {
+        requestAnimationFrame(animate);
+
+        if (isMouseLocked && !isInteracting) {
+            const moveSpeed = 0.08;
+            const direction = new THREE.Vector3();
+            camera.getWorldDirection(direction);
+
+            let nextPosition = player.position.clone();
+
+            if (moveForward) {
+                nextPosition.x += direction.x * moveSpeed;
+                nextPosition.z += direction.z * moveSpeed;
+            }
+            if (moveBackward) {
+                nextPosition.x -= direction.x * moveSpeed;
+                nextPosition.z -= direction.z * moveSpeed;
+            }
+            if (moveLeft) {
+                nextPosition.x += direction.z * moveSpeed;
+                nextPosition.z -= direction.x * moveSpeed;
+            }
+            if (moveRight) {
+                nextPosition.x -= direction.z * moveSpeed;
+                nextPosition.z += direction.x * moveSpeed;
+            }
+
+            const roomSize = 5;
+            nextPosition.x = Math.max(-roomSize + 0.5, Math.min(roomSize - 0.5, nextPosition.x));
+            nextPosition.z = Math.max(-roomSize + 0.5, Math.min(roomSize - 0.5, nextPosition.z));
+
+            if (!checkCollision(nextPosition)) {
+              player.position.copy(nextPosition);
+            }
+        }
+
+        if (debugMode && isInteracting && lastMouseEvent) {
+            const rect = renderer.domElement.getBoundingClientRect();
+            const mouseX = ((lastMouseEvent.clientX - rect.left) / rect.width) * 2 - 1;
+            const mouseY = -((lastMouseEvent.clientY - rect.top) / rect.height) * 2 + 1;
+            document.getElementById('coordinates').textContent = `${mouseX.toFixed(2)}, ${mouseY.toFixed(2)}`;
+        }
+
+        renderer.render(scene, camera);
+        cssRenderer.render(scene, camera);
+    }
+
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        cssRenderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    console.log('🚀 Sistema di interazione diretta inizializzato con 2 monitor (senza forwardEvent)');
+    console.log('💡 Premi Ctrl+D per debug e test');
+    updateSite(currentSiteUrl1, 1);
+    updateSite(currentSiteUrl2, 2);
+    updateDebugInfo();
+    animate();
+  </script>
+</body>
+</html>
