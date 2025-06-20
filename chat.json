@@ -43,5 +43,10 @@
         "user": "test",
         "text": "non ha senso",
         "timestamp": "2025-06-20 09:18:06"
+    },
+    {
+        "user": "BoniniF",
+        "text": "essere un test ha senso?",
+        "timestamp": "2025-06-20 09:18:15"
     }
 ]
