@@ -143,5 +143,10 @@
         "user": "test",
         "text": "si?",
         "timestamp": "2025-06-20 10:01:59"
+    },
+    {
+        "user": "BoniniF",
+        "text": "no, messaggio di test, non tu, test",
+        "timestamp": "2025-06-20 10:02:17"
     }
 ]
