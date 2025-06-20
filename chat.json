@@ -328,5 +328,10 @@
         "user": "test",
         "text": "non ancora",
         "timestamp": "2025-06-20 10:17:34"
+    },
+    {
+        "user": "test",
+        "text": "brava GPT!!!",
+        "timestamp": "2025-06-20 10:21:29"
     }
 ]
