@@ -148,5 +148,10 @@
         "user": "BoniniF",
         "text": "no, messaggio di test, non tu, test",
         "timestamp": "2025-06-20 10:02:17"
+    },
+    {
+        "user": "test",
+        "text": "no, era tuo il messaggio, non mio",
+        "timestamp": "2025-06-20 10:02:24"
     }
 ]
