@@ -388,5 +388,10 @@
         "user": "test",
         "text": "si, credo di si",
         "timestamp": "2025-06-20 10:47:48"
+    },
+    {
+        "user": "test",
+        "text": "quindi ora dovrebbe funzionare?",
+        "timestamp": "2025-06-20 10:59:22"
     }
 ]
