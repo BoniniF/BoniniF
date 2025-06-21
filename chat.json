@@ -461,5 +461,11 @@
         "user": "BoniniF",
         "text": "ecco, bravo",
         "timestamp": "2025-06-21 09:46:16"
+    },
+    {
+        "id": "6856b9ac889013.10342920",
+        "user": "BoniniF",
+        "text": "che strano js, per aggiungere stringhe si usa il . e non il +. comunque ora quando modifico compare la matita",
+        "timestamp": "2025-06-21 09:54:52"
     }
 ]
