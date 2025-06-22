@@ -1,9 +1,5 @@
 {
-    "test": {
-        "password": "$2y$10$iasPjJx7GMW\/cDpkYuOt3umP88s01yiRJO3cd05mxwkyzxBUec4dC",
-        "banned": true
-    },
+    "test": "$2y$10$iasPjJx7GMW\/cDpkYuOt3umP88s01yiRJO3cd05mxwkyzxBUec4dC",
     "BoniniF": "$2y$10$mqTQDRV89xxtoloiPRZkRusk09htisyRnLsxMtGTEfAkprDwJSkhy",
     "Test": "$2y$10$wQaxVHuyj7Gfk7wGuS.3beOpEeMl6WqEyFD.6UykebkPFX4X\/NepS",
-    "TEst": "$2y$10$xooGCDdf03qyuFsujZLli.2nWwpljA5tzwe4efS1mUmEhLJA5h0Ui"
 }
